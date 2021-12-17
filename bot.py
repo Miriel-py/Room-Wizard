@@ -39,7 +39,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 # Set name of database files
 dbfile = global_data.dbfile
 
-# Open connection to the local database    
+# Open connection to the local database
 pinbot_db = sqlite3.connect(dbfile, isolation_level=None)
 
 # Mixed Case prefix
@@ -52,17 +52,17 @@ async def mixedCase(*args):
 
   return list(mixed_prefixes)
 
-         
+
 # --- Database: Get Data ---
 
 # Check database for stored prefix, if none is found, a record is inserted and the default prefix - is used, return all bot prefixes
 async def get_prefix_all(bot, ctx):
-    
+
     try:
         cur=pinbot_db.cursor()
         cur.execute('SELECT * FROM settings_guild where guild_id=?', (ctx.guild.id,))
         record = cur.fetchone()
-        
+
         if record:
             prefix_db = record[1].replace('"','')
             prefix_db_mixed_case = await mixedCase(prefix_db)
@@ -77,22 +77,22 @@ async def get_prefix_all(bot, ctx):
                 prefixes.append(prefix)
     except sqlite3.Error as error:
         await log_error(ctx, error)
-        
+
     return commands.when_mentioned_or(*prefixes)(bot, ctx)
 
 # Check database for stored prefix, if none is found, the default prefix - is used, return only the prefix (returning the default prefix this is pretty pointless as the first command invoke already inserts the record)
 async def get_prefix(bot, ctx, guild_join=False):
-    
+
     if guild_join == False:
         guild = ctx.guild
     else:
         guild = ctx
-    
+
     try:
         cur=pinbot_db.cursor()
         cur.execute('SELECT * FROM settings_guild where guild_id=?', (guild.id,))
         record = cur.fetchone()
-        
+
         if record:
             prefix = record[1]
         else:
@@ -102,24 +102,24 @@ async def get_prefix(bot, ctx, guild_join=False):
             await log_error(ctx, error)
         else:
             await log_error(ctx, error, True)
-        
+
     return prefix
 
 # Get user count
 async def get_user_number(ctx):
-    
+
     try:
         cur=pinbot_db.cursor()
         cur.execute('SELECT COUNT(*) FROM settings_user')
         record = cur.fetchone()
-        
+
         if record:
             user_number = record
         else:
             await log_error(ctx, 'No user data found in database.')
     except sqlite3.Error as error:
         await log_error(ctx, error)
-        
+
     return user_number
 
 
@@ -133,9 +133,9 @@ async def set_prefix(bot, ctx, new_prefix):
         cur=pinbot_db.cursor()
         cur.execute('SELECT * FROM settings_guild where guild_id=?', (ctx.guild.id,))
         record = cur.fetchone()
-        
+
         if record:
-            cur.execute('UPDATE settings_guild SET prefix = ? where guild_id = ?', (new_prefix, ctx.guild.id,))           
+            cur.execute('UPDATE settings_guild SET prefix = ? where guild_id = ?', (new_prefix, ctx.guild.id,))
         else:
             cur.execute('INSERT INTO settings_guild VALUES (?, ?)', (ctx.guild.id, new_prefix,))
     except sqlite3.Error as error:
@@ -146,7 +146,7 @@ async def set_prefix(bot, ctx, new_prefix):
 
 # Error logging
 async def log_error(ctx, error, guild_join=False):
-    
+
     if guild_join == False:
         try:
             cur=pinbot_db.cursor()
@@ -174,21 +174,21 @@ bot = commands.Bot(command_prefix=get_prefix_all, help_command=None, case_insens
 # Set bot status when ready
 @bot.event
 async def on_ready():
-    
+
     print(f'{bot.user.name} has connected to Discord!')
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='pinbot help'))
-    
+
 # Send message to system channel when joining a server
 @bot.event
 async def on_guild_join(guild):
-    
+
     try:
         prefix = await get_prefix(bot, guild, True)
-        
+
         welcome_message =   f'Hello **{guild.name}**! I\'m here to let users pin and unpin messages.\n\n'\
                             f'To pin: React with 📌 or use  {prefix}pin [message id].\n'\
                             f'To unpin: Remove reaction 📌 or use  {prefix}unpin [message id].'
-        
+
         await guild.system_channel.send(welcome_message)
     except:
         return
@@ -230,13 +230,13 @@ async def on_command_error(ctx, error):
 
 
 # --- Server Settings ---
-   
+
 # Command "setprefix" - Sets new prefix (if user has "manage server" permission)
 @bot.command()
 @commands.has_permissions(manage_guild=True)
 @commands.bot_has_permissions(send_messages=True)
 async def setprefix(ctx, *new_prefix):
-    
+
     prefix = ctx.prefix
     if not prefix.lower() == 'rpg ':
         if new_prefix:
@@ -252,7 +252,7 @@ async def setprefix(ctx, *new_prefix):
 @bot.command()
 @commands.bot_has_permissions(send_messages=True)
 async def prefix(ctx):
-    
+
     if not ctx.prefix == 'rpg ':
         current_prefix = await get_prefix(bot, ctx)
         await ctx.reply(f'The prefix for this server is `{current_prefix}`\nTo change the prefix use `{current_prefix}setprefix [prefix]`.', mention_author=False)
@@ -265,37 +265,37 @@ async def prefix(ctx):
 @bot.command(aliases=('g','h',))
 @commands.bot_has_permissions(send_messages=True, embed_links=True)
 async def help(ctx):
-    
+
     prefix = ctx.prefix
     prefix = await get_prefix(bot, ctx)
-                
+
     pin = (
         f'{emojis.bp} React to a message with 📌 (`:pushpin:`)\n'
         f'{emojis.blank} or\n'
         f'{emojis.bp} `{prefix}pin [message id]`'
-    )  
-    
+    )
+
     unpin = (
         f'{emojis.bp} Remove reaction 📌 from message\n'
         f'{emojis.blank} or\n'
         f'{emojis.bp} `{prefix}unpin [message id]`'
-    )  
-    
+    )
+
     server_settings = (
         f'{emojis.bp} `{prefix}prefix` : Check the bot prefix\n'
         f'{emojis.bp} `{prefix}setprefix` / `{prefix}sp` : Set the bot prefix'
-    )  
-    
+    )
+
     embed = discord.Embed(
         color = global_data.color,
         title = 'PINBOT',
         description =   f'Heyo **{ctx.author.name}**, want to pin something?'
-    )    
+    )
     embed.set_footer(text=await global_data.default_footer(prefix))
     embed.add_field(name='HOW TO PIN A MESSAGE', value=pin, inline=False)
     embed.add_field(name='HOW TO UNPIN A MESSAGE', value=unpin, inline=False)
     embed.add_field(name='SERVER SETTINGS', value=server_settings, inline=False)
-    
+
     await ctx.reply(embed=embed, mention_author=False)
 
 
@@ -328,11 +328,11 @@ async def on_raw_reaction_remove(event):
 @bot.command(aliases=('p',))
 @commands.bot_has_permissions(send_messages=True, read_message_history=True, manage_messages=True)
 async def pin(ctx, *args):
-    
+
     prefix = ctx.prefix
-    
+
     syntax = f'The syntax is `{prefix}pin [message id]`'
-    
+
     if args:
         if len(args) == 1:
             arg = args[0]
@@ -365,16 +365,16 @@ async def pin(ctx, *args):
     else:
         await ctx.send(syntax)
         return
-    
+
 # Unpin
 @bot.command(aliases=('u','up',))
 @commands.bot_has_permissions(send_messages=True, read_message_history=True, manage_messages=True)
 async def unpin(ctx, *args):
-    
+
     prefix = ctx.prefix
-    
+
     syntax = f'The syntax is `{prefix}unpin [message id]`'
-    
+
     if args:
         if len(args) == 1:
             arg = args[0]
@@ -408,8 +408,8 @@ async def unpin(ctx, *args):
     else:
         await ctx.send(syntax)
         return
-    
-    
+
+
 
 # --- Miscellaneous ---
 
@@ -417,23 +417,22 @@ async def unpin(ctx, *args):
 @bot.command(aliases=('statistic','statistics,','devstat','ping','about','info','stats'))
 @commands.bot_has_permissions(send_messages=True, embed_links=True)
 async def devstats(ctx):
-
-    prefix = ctx.prefix
-    if not prefix.lower() == 'rpg ':
-        guilds = len(list(bot.guilds))
-        user_number = await get_user_number(ctx)
-        latency = bot.latency
-        
-        embed = discord.Embed(
-            color = global_data.color,
-            title = 'BOT STATISTICS',
-            description =   f'{emojis.bp} {guilds:,} servers\n'\
-                            f'{emojis.bp} {user_number[0]:,} users\n'\
-                            f'{emojis.bp} {round(latency*1000):,} ms latency'
+    """Shows some bot info"""
+    start_time = datetime.utcnow()
+    message = await ctx.send('Testing API latency...')
+    end_time = datetime.utcnow()
+    elapsed_time = end_time - start_time
+    bot_status = (
+        f'{emojis.bp} {len(bot.guilds):,} servers\n'
+        f'{emojis.bp} Bot latency: {round(bot.latency*1000):,} ms\n'
+        f'{emojis.bp} API latency: {round(elapsed_time.total_seconds()*1000):,} ms'
         )
-        
-        await ctx.reply(embed=embed, mention_author=False)
-  
+    creator = f'{emojis.bp} Miriel#0001'
+    embed = discord.Embed(color = global_data.color, title = 'ABOUT PINBOT')
+    embed.add_field(name='BOT STATS', value=bot_status, inline=False)
+    embed.add_field(name='CREATOR', value=creator, inline=False)
+    await message.edit(content=None, embed=embed)
+
 
 
 # --- Owner Commands ---
@@ -448,7 +447,7 @@ async def shutdown(ctx):
         return m.author == ctx.author and m.channel == ctx.channel
 
     prefix = ctx.prefix
-    if not prefix.lower() == 'rpg ':    
+    if not prefix.lower() == 'rpg ':
         await ctx.reply(f'**{ctx.author.name}**, are you **SURE**? `[yes/no]`', mention_author=False)
         answer = await bot.wait_for('message', check=check, timeout=30)
         if answer.content.lower() in ['yes','y']:
