@@ -109,7 +109,7 @@ async def embed_main_help(ctx: discord.ApplicationContext) -> discord.Embed:
 
     embed = discord.Embed(
         color = settings.EMBED_COLOR,
-        title = 'ROOM WIZARDS',
+        title = 'ROOM WIZARD',
         description = f'Heyo **{ctx.author.name}**, want to pin something?'
     )
     embed.set_footer(text=settings.DEFAULT_FOOTER)

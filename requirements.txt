@@ -1,0 +1,2 @@
+py-cord==2.0.0a4542+gd4f55766
+python-dotenv>=0.19.2

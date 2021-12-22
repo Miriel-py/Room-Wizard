@@ -16,5 +16,5 @@ LOG_FILE = os.path.join(BOT_DIR, 'logs/discord.log')
 DEV_GUILDS = [730115558766411857]
 
 # Embed color
-EMBED_COLOR = 0xB93239
+EMBED_COLOR = 0x6C48A7
 DEFAULT_FOOTER = 'Just pinning things.'

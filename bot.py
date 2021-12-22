@@ -22,6 +22,7 @@ EXTENSIONS = [
     'cogs.main',
     'cogs.dev',
     'cogs.pins',
+    'cogs.rooms',
 ]
 if __name__ == '__main__':
     for extension in EXTENSIONS:

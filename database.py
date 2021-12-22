@@ -1,16 +1,17 @@
 # database.py
 """Access to the database"""
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 import sqlite3
-from typing import NamedTuple, Optional, Union
+from typing import Optional, Union
 
 import discord
 
-from resources import logs, settings
+from resources import exceptions, logs, settings
 
 
-PINBOT_DB = sqlite3.connect(settings.DB_FILE, isolation_level=None)
+PINBOT_DB = sqlite3.connect(settings.DB_FILE, isolation_level=None, detect_types=sqlite3.PARSE_DECLTYPES)
 
 
 INTERNAL_ERROR_SQLITE3 = 'Error executing SQL.\nError: {error}\nTable: {table}\nFunction: {function}\SQL: {sql}'
@@ -18,13 +19,47 @@ INTERNAL_ERROR_LOOKUP = 'Error assigning values.\nError: {error}\nTable: {table}
 INTERNAL_ERROR_NO_ARGUMENTS = 'You need to specify at least one keyword argument.\nTable: {table}\nFunction: {function}'
 
 
-class Channel(NamedTuple):
-    channe_id: int
+@dataclass()
+class Room():
+    """Object that represents a record of the table "rooms"."""
+    channel_id: int
+    edit_count: int
+    last_edit_at: datetime
     owner_id: int
+
+    async def refresh(self, ctx: discord.ApplicationContext) -> None:
+        """Refreshes clan data from the database.
+        If the record doesn't exist anymore, "record_exists" will be set to False.
+        All other values will stay on their old values before deletion (!).
+        """
+        new_settings = await get_room(ctx, self.channel_id)
+        self.edit_count = new_settings.edit_count
+        self.last_edit_at = new_settings.last_edit_at
+        self.owner_id = new_settings.owner_id
+
+    async def update(self, ctx: discord.ApplicationContext, **kwargs) -> None:
+        """Updates the room record in the database. Also calls refresh().
+
+        Arguments
+        ---------
+        kwargs (column=value):
+            channel_id: int
+            owner_id: int
+            edit_count: int
+            last_edit_at: datetime without microseconds
+
+        Raises
+        ------
+        sqlite3.Error if something happened within the database.
+        NoArgumentsError if no kwargs are passed (need to pass at least one).
+        Also logs all errors to the database.
+        """
+        await _update_room(ctx, self.channel_id, **kwargs)
+        await self.refresh(ctx)
 
 
 async def log_error(error: Union[Exception, str], ctx: Optional[discord.ApplicationContext] = None):
-    """Logs an error to the database and the logfile
+    """Logs an error to the database and the log file
 
     Arguments
     ---------
@@ -38,32 +73,36 @@ async def log_error(error: Union[Exception, str], ctx: Optional[discord.Applicat
     """
     table = 'errors'
     function_name = 'log_error'
-    sql = 'INSERT INTO errors VALUES (?, ?, ?, ?)'
+    sql = 'INSERT INTO errors (date_time, command_name, command_data, error) VALUES (?, ?, ?, ?)'
     if ctx is not None:
+        date_time = ctx.author.created_at
         command_name = f'{ctx.command.full_parent_name} {ctx.command.name}'.strip()
-        timestamp = ctx.author.created_at
-        user_options = str(ctx.interaction.data)
+        command_data = str(ctx.interaction.data)
     else:
-        timestamp = datetime.utcnow()
-        user_options = 'N/A'
+        date_time = datetime.utcnow()
+        command_name = 'N/A'
+        command_data = 'N/A'
     try:
         cur = PINBOT_DB.cursor()
-        cur.execute(sql, (timestamp, command_name, user_options, str(error)))
+        cur.execute(sql, (date_time, command_name, command_data, str(error)))
     except sqlite3.Error as error:
-        logs.logger.error(
-            INTERNAL_ERROR_SQLITE3.format(error=error, table=table, function=function_name, sql=sql),
-            ctx
-        )
+        if ctx is not None:
+            logs.logger.error(
+                INTERNAL_ERROR_SQLITE3.format(error=error, table=table, function=function_name, sql=sql),
+                ctx
+            )
+        else:
+            logs.logger.error(INTERNAL_ERROR_SQLITE3.format(error=error, table=table, function=function_name, sql=sql))
         raise
 
 
 # --- Database: Get Data ---
-async def get_channel(ctx: Union[discord.ApplicationContext, discord.Guild]) -> Channel:
-    """Gets all channel settings.
+async def get_room(ctx: discord.ApplicationContext, channel_id: int) -> Room:
+    """Gets the settings of a room. If the room doesn't exist, a new record is created.
 
     Returns
     -------
-    Channel object
+    Room object
 
     Raises
     ------
@@ -72,37 +111,31 @@ async def get_channel(ctx: Union[discord.ApplicationContext, discord.Guild]) -> 
     LookupError if something goes wrong reading the dict.
     Also logs all errors to the database.
     """
-    table = 'settings_channel'
-    function_name = 'get_channel'
-    sql = 'SELECT * FROM settings_channel where channel_id=?'
-    channel_id = ctx.channel.id
+    table = 'rooms'
+    function_name = 'get_room'
+    sql = 'SELECT * FROM rooms WHERE channel_id=?'
     try:
         cur = PINBOT_DB.cursor()
         cur.row_factory = sqlite3.Row
         cur.execute(sql, (channel_id,))
         record = cur.fetchone()
+        if not record:
+            sql = 'INSERT INTO rooms (channel_id, last_edit_at) VALUES (?, ?)'
+            cur.execute(sql, (channel_id, datetime.utcnow().replace(microsecond=0)))
+            sql = 'SELECT * FROM rooms WHERE channel_id=?'
+            cur.execute(sql, (channel_id,))
+            record = cur.fetchone()
     except sqlite3.Error as error:
         await log_error(
             INTERNAL_ERROR_SQLITE3.format(error=error, table=table, function=function_name, sql=sql),
             ctx
         )
         raise
-    if not record:
-        sql = 'INSERT INTO settings_channel (guild_id, owner_id) VALUES (?, ?)'
-        try:
-            cur.execute(sql, (channel_id, 0))
-            sql = 'SELECT * FROM settings_guild where guild_id=?'
-            cur.execute(sql, (channel_id,))
-            record = cur.fetchone()
-        except sqlite3.Error as error:
-            await log_error(
-                INTERNAL_ERROR_SQLITE3.format(error=error, table=table, function=function_name, sql=sql),
-                ctx
-            )
-            raise
     try:
-        channel_settings = Channel(
+        channel_settings = Room(
             channel_id = record['channel_id'],
+            edit_count = record['edit_count'],
+            last_edit_at = datetime.fromisoformat(record['last_edit_at']),
             owner_id = record['owner_id'],
         )
     except Exception as error:
@@ -115,16 +148,18 @@ async def get_channel(ctx: Union[discord.ApplicationContext, discord.Guild]) -> 
     return channel_settings
 
 
-
 # --- Database: Write Data ---
-async def update_channel(ctx: discord.ApplicationContext, **kwargs) -> None:
-    """Updates guild settings.
+async def _update_room(ctx: discord.ApplicationContext, channel_id: int, **kwargs) -> None:
+    """Updates room settings. Use Room.update() to trigger this.
 
     Arguments
     ---------
     ctx: Context.
+    channel_id: int
     kwargs (column=value):
         channel_id: int
+        edit_count: int
+        last_edit_at: datetime without microseconds
         owner_id: int
 
     Raises
@@ -133,24 +168,23 @@ async def update_channel(ctx: discord.ApplicationContext, **kwargs) -> None:
     NoArgumentsError if not kwargs are passed (need to pass at least one)
     Also logs all error to the database.
     """
-    table = 'settings_channel'
-    function_name = 'update_channel'
-    channel_id = ctx.channel.id
+    table = 'rooms'
+    function_name = 'update_room'
     if not kwargs:
         await log_error(
             INTERNAL_ERROR_NO_ARGUMENTS.format(table=table, function=function_name),
             ctx
         )
         raise exceptions.NoArgumentsError('You need to specify at least one keyword argument.')
-    await get_channel(ctx) # Makes sure the user exists in the database
+    await get_room(ctx, channel_id) # Makes sure the record exists
     try:
         cur = PINBOT_DB.cursor()
-        sql = 'UPDATE settings_channel SET'
+        sql = 'UPDATE rooms SET'
         for kwarg in kwargs:
             sql = f'{sql} {kwarg} = :{kwarg},'
         sql = sql.strip(",")
-        kwargs['channel_id'] = channel_id
-        sql = f'{sql} WHERE channel_id = :channel_id'
+        kwargs['channel_id_old'] = channel_id
+        sql = f'{sql} WHERE channel_id = :channel_id_old'
         cur.execute(sql, kwargs)
     except sqlite3.Error as error:
         await log_error(
