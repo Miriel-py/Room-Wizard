@@ -73,7 +73,7 @@ async def log_error(error: Union[Exception, str], ctx: Optional[discord.Applicat
     """
     table = 'errors'
     function_name = 'log_error'
-    sql = 'INSERT INTO errors (date_time, command_name, command_data, error) VALUES (?, ?, ?, ?)'
+    sql = f'INSERT INTO {table} (date_time, command_name, command_data, error) VALUES (?, ?, ?, ?)'
     if ctx is not None:
         date_time = ctx.author.created_at
         command_name = f'{ctx.command.full_parent_name} {ctx.command.name}'.strip()
@@ -113,16 +113,16 @@ async def get_room(ctx: discord.ApplicationContext, channel_id: int) -> Room:
     """
     table = 'rooms'
     function_name = 'get_room'
-    sql = 'SELECT * FROM rooms WHERE channel_id=?'
+    sql = f'SELECT * FROM {table} WHERE channel_id=?'
     try:
         cur = PINBOT_DB.cursor()
         cur.row_factory = sqlite3.Row
         cur.execute(sql, (channel_id,))
         record = cur.fetchone()
         if not record:
-            sql = 'INSERT INTO rooms (channel_id, last_edit_at) VALUES (?, ?)'
+            sql = f'INSERT INTO {table} (channel_id, last_edit_at) VALUES (?, ?)'
             cur.execute(sql, (channel_id, datetime.utcnow().replace(microsecond=0)))
-            sql = 'SELECT * FROM rooms WHERE channel_id=?'
+            sql = f'SELECT * FROM {table} WHERE channel_id=?'
             cur.execute(sql, (channel_id,))
             record = cur.fetchone()
     except sqlite3.Error as error:
@@ -179,7 +179,7 @@ async def _update_room(ctx: discord.ApplicationContext, channel_id: int, **kwarg
     await get_room(ctx, channel_id) # Makes sure the record exists
     try:
         cur = PINBOT_DB.cursor()
-        sql = 'UPDATE rooms SET'
+        sql = f'UPDATE {table} SET'
         for kwarg in kwargs:
             sql = f'{sql} {kwarg} = :{kwarg},'
         sql = sql.strip(",")
