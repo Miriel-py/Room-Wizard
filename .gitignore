@@ -132,7 +132,7 @@ dmypy.json
 .pyre/
 
 # Database
-database/archmage_db.db
+database/room_wizard_db.db
 
 # Visual Studio Code
 .vscode/

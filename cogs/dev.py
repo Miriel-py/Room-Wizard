@@ -5,7 +5,7 @@ import importlib
 import sys
 
 import discord
-from discord.commands import SlashCommandGroup, Permission, Option
+from discord.commands import SlashCommandGroup, CommandPermission, Option
 from discord.ext import commands
 
 from resources import settings, views
@@ -21,7 +21,7 @@ class DevCog(commands.Cog):
         "Development commands",
         guild_ids=settings.DEV_GUILDS,
         permissions=[
-            Permission(
+            CommandPermission(
                 "owner", 2, True
             )
         ],
