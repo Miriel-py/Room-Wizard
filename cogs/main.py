@@ -31,7 +31,7 @@ class MainCog(commands.Cog):
         end_time = datetime.utcnow()
         api_latency = end_time - start_time
         embed = await embed_about(self.bot, ctx, api_latency)
-        await ctx.interaction.edit_original_message(content=None, embed=embed)
+        await ctx.interaction.edit_original_response(content=None, embed=embed)
 
      # Events
     @commands.Cog.listener()
